@@ -178,11 +178,82 @@ df_norm
 df_final = pIC50(df_norm)
 df_final
 
-# Remove the intermediate bioactivity class
+# Remove the intermediate bioactivity class and save the new CSV file
 df_2class = df_final[df_final.bioactivity_class != 'intermediate']
-df_2class
+df_2class.to_csv('aromatase_bioactivity_pICC50.csv', index=False)
 
 
- 
+# Calculating molecular descriptors
+# Calculating PaDEL-Descriptors
+! wget https://github.com/dataprofessor/bioinformatics/raw/master/padel.zip
+! wget https://github.com/dataprofessor/bioinformatics/raw/master/padel.sh
+! unzip padel.zip
+
+# Loading Bioactivity Data
+import pandas as pd
+df3 = pd.read_csv('aromatase_bioactivity_pICC50.csv')
+selection = ['canonical_smiles','molecule_chembl_id']
+df3_selection = df3[selection]
+df3_selection.to_csv('molecule.smi', sep='\t', index=False, header=False)
+! cat molecule.smi | head -5
+
+# Calculating Fingerprint Descriptors
+# Calculating PaDEL Descriptors
+
+! cat padel.sh
+! bash padel.sh
+
+# Prepare X and Y Data Matrices
+# X Data Matrix 
+df3_X = pd.read_csv('descriptors_output.csv')
+
+#dropping the name column
+df3_X = df3_X.drop(columns=['Name'])
+
+# convert IC550 to pIC550 for Y Variable
+df3_Y = df3['pIC50']
+
+#Combine X and Y Variables
+dataset3 = pd.concat([df3_X,df3_Y], axis=1)
+
+#save dataset
+dataset3.to_csv('aromatase_3class_pIC50_pubchem_fp.csv', index=False)
+
+#Load data set and fix errors
+df = pd.read_csv('aromatase_bioactivity_pIC50_pubchem_fp.csv')
+df =df[~df.isin([np.nan, np.inf, -np.inf]).any(1)]
+
+#drop the pIC50 column 
+X = df.drop('pIC50', axis=1)
+
+# Remove low variance features
+from sklearn.feature_selection import VarianceThreshold
+selection = VarianceThreshold(threshold=(.8 * (1 - .8)))    
+X = selection.fit_transform(X)
+
+#Build regression model using random forest 
+import numpy as np
+np.random.seed(100)
+model = RandomForestRegressor(n_estimators=100)
+model.fit(X_train, Y_train)
+r2 = model.score(X_test, Y_test)
+
+# Build Scatter plot of Experimental vs Predicted pIC50 values
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+sns.set(color_codes=True)
+sns.set_style("white")
+
+ax = sns.regplot(Y_test, Y_pred, scatter_kws={'alpha':0.4})
+ax.set_xlabel('Experimental pIC50', fontsize='large', fontweight='bold')
+ax.set_ylabel('Predicted pIC50', fontsize='large', fontweight='bold')
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 12)
+ax.figure.set_size_inches(5, 5)
+plt.show
+
+
+
 
 
